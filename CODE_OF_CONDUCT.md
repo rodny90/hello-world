@@ -34,7 +34,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers by opening a report through [GitHub's private reporting](https://github.com/rodny90/repo-ready/security/advisories/new) or contacting a maintainer directly. All complaints will be reviewed and investigated promptly and fairly, and the privacy and security of the reporter will be respected.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers by opening a report through [GitHub's private reporting](https://github.com/rodny90/pr-policy/security/advisories/new) or contacting a maintainer directly. All complaints will be reviewed and investigated promptly and fairly, and the privacy and security of the reporter will be respected.
 
 ## Attribution
 

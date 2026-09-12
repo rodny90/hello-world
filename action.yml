@@ -1,0 +1,108 @@
+name: pr-policy
+description: Check a pull request against the contribution policy your project already wrote down.
+author: rodny90
+
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  config:
+    description: Path to pr-policy.yml. Defaults to the conventional locations.
+    required: false
+    default: ""
+  base:
+    description: Base ref to compare against. Defaults to the pull request's base branch.
+    required: false
+    default: ""
+  strict:
+    description: Fail the job on error findings even if the config does not enforce.
+    required: false
+    default: "false"
+  comment:
+    description: Post the findings as a sticky comment on the pull request.
+    required: false
+    default: "true"
+  python-version:
+    description: Python version used to run pr-policy.
+    required: false
+    default: "3.12"
+
+outputs:
+  exit-code:
+    description: 0 when the policy passed or is reporting-only, 1 when enforcement failed.
+    value: ${{ steps.check.outputs.exit-code }}
+  findings:
+    description: The findings as JSON.
+    value: ${{ steps.check.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install pr-policy
+      shell: bash
+      run: python -m pip install --quiet "${{ github.action_path }}"
+
+    - name: Check the pull request
+      id: check
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        BASE_REF: ${{ github.base_ref }}
+        CONFIG: ${{ inputs.config }}
+        STRICT: ${{ inputs.strict }}
+      run: |
+        set -uo pipefail
+
+        base="${BASE:-origin/${BASE_REF}}"
+        args=(check --base "$base")
+        [ -n "$CONFIG" ] && args+=(--config "$CONFIG")
+        [ "$STRICT" = "true" ] && args+=(--strict)
+
+        # The base branch is not fetched by a shallow checkout.
+        git fetch --quiet --depth=50 origin "${BASE_REF}" 2>/dev/null || true
+
+        pr-policy "${args[@]}" --format markdown > policy-comment.md
+        code=$?
+        pr-policy "${args[@]}" --format json > policy-findings.json || true
+        pr-policy "${args[@]}" || true
+
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        {
+          echo "findings<<EOF"
+          cat policy-findings.json
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        marker="<!-- pr-policy -->"
+        printf '%s\n' "$marker" >> policy-comment.md
+
+        # Update the existing comment rather than adding one per push.
+        existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+          --jq "map(select(.body | contains(\"$marker\"))) | .[0].id // empty")
+
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$existing" \
+            -F body=@policy-comment.md >/dev/null
+        else
+          gh api -X POST "repos/$REPO/issues/$PR/comments" \
+            -F body=@policy-comment.md >/dev/null
+        fi
+
+    - name: Apply the result
+      shell: bash
+      run: exit ${{ steps.check.outputs.exit-code }}

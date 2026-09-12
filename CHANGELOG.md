@@ -8,23 +8,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.0] - 2026-09-12
 
-First release.
+First release. Two commands: `pr-policy`, which checks pull requests against the
+policy a project wrote down, and `repo-ready`, which checks that the policy was
+written down at all.
 
-### Added
+### Added — pr-policy
 
-- Twelve weighted repository readiness checks: `license`, `readme`, `readme-sections`,
-  `tests`, `ci`, `contributing`, `security`, `manifest`, `changelog`, `code-of-conduct`,
-  `gitignore` and `issue-templates`.
-- A weighted score out of 100 with an A–F grade, and failures ordered by weight so the
-  most valuable fix comes first.
-- A concrete suggested fix for every failing check.
-- Three output formats: `text` (coloured when attached to a terminal, honouring `NO_COLOR`),
-  `json` and `markdown`.
-- `--min-score N`, which exits `1` below the threshold so the tool can gate CI.
-- Case-insensitive file lookup that also searches `.github/` and `docs/`, matching where
-  GitHub looks for community files.
-- Vendored and build directories are skipped, so a dependency's test suite cannot make a
-  repository look tested.
+- **`attribution`** — enforces the [Linux kernel's AI attribution
+  policy](https://docs.kernel.org/process/coding-assistants.html) on commit trailers:
+  a coding agent must never add `Signed-off-by:` (only a human can certify the DCO),
+  tool assistance belongs in `Assisted-by:` rather than `Co-authored-by:`, and
+  optionally every commit must be signed off. Matching is on identities an agent
+  writes about itself, never on the code.
+- **`disclosure`** — checks that the project's AI-disclosure checkbox was answered.
+  Either answer passes; the rule fires only when the question was ignored.
+- **`template`** — checks the description is not empty and that the template's
+  `<!-- ... -->` prompts were replaced.
+- **`linked_issue`** — checks the body references an issue with a closing keyword.
+- **`size`** — reports diffs over the project's line and file guidelines.
+- **`pr-policy init`** — generates a starter config by reading `CONTRIBUTING.md`,
+  the pull request template and `AGENTS.md`, quoting the line behind every
+  inference so the maintainer can check the reasoning. Inference works over
+  sentences, skips prohibitions ("agents must never sign off" is not a sign-off
+  policy), and requires requirement-shaped language before enabling a rule.
+- Reporting-only by default: nothing fails a build until `enforce: true` or `--strict`.
+- Three output formats: `text` (coloured on a terminal, honouring `NO_COLOR`),
+  `json`, and `markdown` for posting as a pull request comment.
+- A composite GitHub Action that posts a single sticky comment and updates it on
+  each push.
+- Rules that read the pull request body are skipped, not failed, when no title or
+  body is available — an absent body is not an empty one.
+- Strict configuration validation: unknown rules and unknown options are errors,
+  so a typo never quietly disables a rule.
 
-[Unreleased]: https://github.com/rodny90/repo-ready/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/rodny90/repo-ready/releases/tag/v0.1.0
+### Added — repo-ready
+
+- Twelve weighted repository readiness checks, an A–F grade, and a concrete
+  suggested fix for every failure, ordered by weight.
+- `--min-score N` to gate CI, plus `json` and `markdown` output.
+- Case-insensitive file lookup that also searches `.github/` and `docs/`, and skips
+  vendored directories so a dependency's tests cannot make a repository look tested.
+
+[Unreleased]: https://github.com/rodny90/pr-policy/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rodny90/pr-policy/releases/tag/v0.1.0

@@ -1,145 +1,207 @@
-# repo-ready
+# pr-policy
 
-[![CI](https://github.com/rodny90/repo-ready/actions/workflows/ci.yml/badge.svg)](https://github.com/rodny90/repo-ready/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/repo-ready.svg)](https://pypi.org/project/repo-ready/)
-[![Python versions](https://img.shields.io/pypi/pyversions/repo-ready.svg)](https://pypi.org/project/repo-ready/)
+[![CI](https://github.com/rodny90/pr-policy/actions/workflows/ci.yml/badge.svg)](https://github.com/rodny90/pr-policy/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/pr-policy.svg)](https://pypi.org/project/pr-policy/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pr-policy.svg)](https://pypi.org/project/pr-policy/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Score a repository on the things contributors and users actually look for, and find out what to fix first.**
+**Check pull requests against the contribution policy your project already wrote down.**
 
-A repo can have great code and still get ignored: no licence, so companies can't touch it; no usage example, so nobody gets past the first minute; no CI badge, so nobody trusts a pull request will be reviewed. `repo-ready` checks for those twelve things in under a second, gives you a weighted score out of 100, and orders the failures by how much they cost you.
-
-It has **no dependencies**, makes **no network calls**, and reads nothing but your files.
+`pr-policy` does not try to work out whether a human or a model wrote the code. It checks something it can actually know: whether the submission follows the rules in your `CONTRIBUTING.md` and your pull request template.
 
 ```
-repo-ready  .
+pr-policy
 
-  PASS  Has a LICENSE                    found LICENSE
-  PASS  Has a substantial README         found README.md (2841 characters)
-  PASS  README covers install and usage  README documents installation and usage
-  PASS  Has automated tests              found tests in tests/
-  PASS  Runs CI on every push            found 1 GitHub Actions workflow(s)
-  FAIL  Has CONTRIBUTING guidance        no CONTRIBUTING file found
-  PASS  Has a security policy            found SECURITY.md
-  PASS  Has a package manifest           found pyproject.toml
-  PASS  Has a CHANGELOG                  found CHANGELOG.md
-  PASS  Has a code of conduct            found CODE_OF_CONDUCT.md
-  PASS  Has a .gitignore                 found .gitignore
-  PASS  Has an issue template            found .github/ISSUE_TEMPLATE/
+  warn  commit 4ea6a851 has 'Signed-off-by: Claude <noreply@anthropic.com>', which names a coding agent (claude)
+        Only a human can certify the DCO. Sign off as yourself and record the tool with 'Assisted-by: <tool>:<model>'.
 
-Score: 92/100  (grade A)
+  warn  the AI-disclosure checkbox in the pull request template is not ticked
+        Tick the option that applies. Either answer is accepted — the box only needs to be answered.
 
-Fix these first:
-  [ 8 pts] Has CONTRIBUTING guidance
-           Add CONTRIBUTING.md describing how to set up the project, run tests and open a pull request.
+  warn  the pull request body does not reference an issue
+        This project asks for an issue first. Add a line such as 'Closes #123' so the discussion and the change stay linked.
+
+  rules run: attribution, disclosure, template, linked_issue, size
+  3 warn
 ```
+
+## Why this exists
+
+Maintainers are being buried in contributions, and the tools arriving to help are mostly **throttles**: cap the number of open pull requests, restrict them to collaborators, turn them off. Those control *how many* submissions arrive. Nothing checks whether an arriving submission follows the rules the project published.
+
+The gap is concrete. GitHub's issue forms have supported required fields and per-field validation for years; [issue forms are not supported for pull requests](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/about-issue-and-pull-request-templates). A pull request template is inert markdown. A contributor can delete the whole thing — including the AI-disclosure checkbox your project added — and nothing notices.
+
+Projects have written the policies. MicroPython and ESLint require an AI declaration. The [Linux kernel](https://docs.kernel.org/process/coding-assistants.html) requires an `Assisted-by:` trailer and forbids agents from adding `Signed-off-by:`, because only a human can certify the DCO. `pr-policy` is the enforcement half those policies never got.
+
+## Design
+
+Three commitments, and the tool is built around them:
+
+**It never tries to detect AI.** Detection is an arms race — any classifier good enough to identify AI output can be used to train past it — and maintainers have said plainly that they do not want a tool adjudicating authorship. Every rule here is deterministic: a trailer is present or it is not, a checkbox is ticked or it is not.
+
+**It routes on disclosure and never judges it.** If your template asks whether AI was used, *either* answer passes. The rule fires when the question was ignored, not when it was answered in a way someone dislikes.
+
+**It reports signals, not verdicts.** Nothing fails a build until you set `enforce: true`. The default posture is a comment on the pull request telling the maintainer what to look at, leaving the judgement where it belongs.
 
 ## Installation
 
 ```bash
-pip install repo-ready
+pip install pr-policy
 ```
 
-Or run it once without installing anything:
+Or without installing anything:
 
 ```bash
-pipx run repo-ready .
+pipx run pr-policy check --base origin/main
 ```
 
 Requires Python 3.9 or newer.
 
-## Usage
+## Quick start
 
-Audit the current directory:
-
-```bash
-repo-ready
-```
-
-Audit somewhere else, in any of three formats:
+### 1. Generate a config from your own documentation
 
 ```bash
-repo-ready ~/code/my-project
-repo-ready . --format json
-repo-ready . --format markdown
+pr-policy init
 ```
 
-### Example: gate a pull request on it
-
-`--min-score` makes the command exit `1` when the score drops below your bar, so it works as a CI step. Add this to `.github/workflows/ci.yml`:
+`init` reads your `CONTRIBUTING.md`, your pull request template and your `AGENTS.md`, and turns the enforceable parts into configuration — **quoting the line it relied on**, so you check the reasoning rather than trust it:
 
 ```yaml
-- name: Check repository health
-  run: pipx run repo-ready . --min-score 80
+rules:
+  attribution:
+    enabled: true
+    severity: "warn"
+    forbid_agent_sign_off: true
+    prefer_assisted_by: true
+    # CONTRIBUTING.md:31 — "All commits must carry a sign-off under the DCO: use `git commit -s`."
+    require_signed_off: true
+
+  disclosure:
+    # .github/PULL_REQUEST_TEMPLATE.md:14 — "I used generative AI tools, and a human reviewed the result"
+    enabled: true
+    severity: "warn"
 ```
 
-### Example: put the table in your README
+Inference is a heuristic and it will sometimes be wrong. That is exactly why it shows its evidence — read the file before you commit it.
+
+### 2. Run it in CI
+
+```yaml
+name: pr-policy
+on: pull_request
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # commit trailers need the branch history
+      - uses: rodny90/pr-policy@v1
+```
+
+That posts a single sticky comment on the pull request and updates it on every push. It will not fail the job until your config says to.
+
+### 3. Or run it locally
 
 ```bash
-repo-ready . --format markdown >> README.md
+pr-policy check --base origin/main
+pr-policy check --base origin/main --format json
+pr-policy check --base origin/main --format markdown
+pr-policy check --base origin/main --strict     # fail on error findings
 ```
 
-### Example: track the score over time
+## The rules
 
-The JSON output is stable and scriptable:
+| Rule | Default | What it checks |
+| --- | --- | --- |
+| `attribution` | **on**, warn | Agents never add `Signed-off-by:`; tool assistance uses `Assisted-by:` rather than `Co-authored-by:`; optionally that every commit is signed off |
+| `template` | **on**, warn | The description is not empty and the template's `<!-- ... -->` prompts were replaced |
+| `size` | **on**, info | The diff is within the project's line and file guidelines |
+| `disclosure` | off, warn | The AI-disclosure checkbox was answered — with either answer |
+| `linked_issue` | off, warn | The body references an issue (`Closes #123`) |
 
-```bash
-repo-ready . --format json | jq '.score'
+`disclosure` and `linked_issue` are off until your documentation says the project wants them, which is what `pr-policy init` works out.
+
+### The attribution rule
+
+This is the one worth reading twice, because it encodes a real policy rather than a preference:
+
+```
+Signed-off-by: Claude <noreply@anthropic.com>     ← flagged: agents cannot certify the DCO
+Co-authored-by: Claude <noreply@anthropic.com>    ← flagged: co-authorship implies authorship
+Assisted-by: Claude:claude-opus-5                 ← correct
+Signed-off-by: A Human <human@example.com>        ← correct
 ```
 
-```json
-{
-  "path": ".",
-  "score": 92,
-  "grade": "A",
-  "checks": [
-    { "id": "license", "title": "Has a LICENSE", "passed": true, "weight": 15,
-      "detail": "found LICENSE", "fix": "" }
-  ]
-}
+"Names a coding agent" means the trailer contains an identity the agent wrote about *itself*. That is not AI detection — it is reading a label the tool volunteered. A contributor who does not add the trailer is never matched by it.
+
+## Configuration
+
+`.github/pr-policy.yml`:
+
+```yaml
+version: 1
+enforce: false        # true makes error findings fail the build
+
+rules:
+  attribution:
+    enabled: true
+    severity: warn                  # error | warn | info
+    forbid_agent_sign_off: true
+    prefer_assisted_by: true
+    require_signed_off: false
+    agent_identities: ["claude", "copilot", "codex", "cursor", "devin", "aider"]
+  disclosure:
+    enabled: true
+    severity: warn
+  template:
+    enabled: true
+    severity: warn
+    min_body_chars: 30
+  linked_issue:
+    enabled: false
+    severity: warn
+    keywords: ["closes", "fixes", "resolves"]
+  size:
+    enabled: true
+    severity: info
+    max_lines: 1000
+    max_files: 100
 ```
 
-## The checks
+`rules: {size: false}` is shorthand for disabling a rule. Unknown rules and unknown options are errors rather than silent no-ops, so a typo never quietly turns a rule off.
 
-Scores are weighted, not counted — a missing licence costs far more than a missing issue template.
+### Exit codes
 
-| Check | Weight | Passes when |
-| --- | ---: | --- |
-| `license` | 15 | `LICENSE`, `LICENCE` or `COPYING` exists and holds real licence text |
-| `readme` | 15 | A `README` exists with at least 300 characters |
-| `tests` | 15 | A `tests/` directory or files named by convention (`test_*.py`, `*_test.go`, `*.test.ts`, ...) |
-| `ci` | 15 | A GitHub Actions workflow, or GitLab / Travis / CircleCI / Azure config |
-| `contributing` | 8 | A `CONTRIBUTING` file exists |
-| `security` | 7 | A `SECURITY` file exists |
-| `readme-sections` | 5 | The README has both an install and a usage section |
-| `manifest` | 5 | A package manifest exists (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, ...) |
-| `changelog` | 5 | A `CHANGELOG`, `CHANGES` or `HISTORY` file exists |
-| `code-of-conduct` | 5 | A `CODE_OF_CONDUCT` file exists |
-| `gitignore` | 3 | A `.gitignore` exists |
-| `issue-templates` | 2 | `.github/ISSUE_TEMPLATE/` is present and non-empty |
-
-Grades: **A** ≥ 90, **B** ≥ 75, **C** ≥ 60, **D** ≥ 40, **F** below that.
-
-Files are found case-insensitively and are also looked for in `.github/` and `docs/`, matching where GitHub itself looks. Vendored directories (`node_modules/`, `vendor/`, `third_party/`, build output) are skipped, so a dependency's test suite can't make your repo look tested.
-
-## Options
-
-| Flag | Effect |
+| Code | Meaning |
 | --- | --- |
-| `-f`, `--format {text,json,markdown}` | Output format (default `text`) |
-| `--min-score N` | Exit `1` if the score is below `N` |
-| `--no-fixes` | Omit the suggested fixes from text output |
-| `--version` | Print the version |
+| `0` | No error findings, or the project is reporting-only |
+| `1` | Error findings and `enforce: true` (or `--strict`) |
+| `2` | Bad configuration, bad revision, or a missing file |
 
-Colour is used when stdout is a terminal and is disabled by [`NO_COLOR`](https://no-color.org).
+## Also included: `repo-ready`
+
+You cannot enforce a policy that was never written down. `repo-ready` audits whether the documents exist at all — licence, README, tests, CI, `CONTRIBUTING`, `SECURITY` — and scores them out of 100:
+
+```bash
+repo-ready .
+repo-ready . --min-score 80   # as a CI gate
+```
+
+See [`docs/repo-ready.md`](docs/repo-ready.md).
 
 ## What it is not
 
-`repo-ready` checks that the scaffolding of a healthy project is *present*. It cannot tell you whether your README is any good, whether your tests are meaningful, or whether your licence suits your goals. It is a pre-flight checklist, not a review.
+`pr-policy` checks compliance with rules, not quality of work. It cannot tell you whether a change is correct, whether the tests are meaningful, or whether a disclosed AI-assisted contribution is any good. It tells you which submissions ignored what you asked for — which is the part a maintainer can currently only find by reading every one.
 
 ## Contributing
 
-Bug reports and new checks are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Adding a check is one entry in the `CHECKS` tuple in `src/repo_ready/checks.py` plus a test.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Adding a rule is one function in `src/pr_policy/rules.py`, one entry in `DEFAULTS`, and a test.
 
 ## License
 
