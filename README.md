@@ -101,10 +101,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # commit trailers need the branch history
-      - uses: rodny90/pr-policy@v1
+      - uses: rodny90/pr-policy@v0
 ```
 
 That posts a single sticky comment on the pull request and updates it on every push. It will not fail the job until your config says to.
+
+`@v0` follows the newest 0.x release. Pin an exact tag (`@v0.1.0`) if you would rather approve every change yourself. While this project is pre-1.0, treat the rule set as settled and the configuration schema as still open to change.
 
 ### 3. Or run it locally
 

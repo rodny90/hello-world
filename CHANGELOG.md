@@ -35,11 +35,23 @@ written down at all.
 - Three output formats: `text` (coloured on a terminal, honouring `NO_COLOR`),
   `json`, and `markdown` for posting as a pull request comment.
 - A composite GitHub Action that posts a single sticky comment and updates it on
-  each push.
+  each push. It resolves the base branch with an explicit refspec, so it works on
+  the default shallow checkout rather than only with `fetch-depth: 0`.
 - Rules that read the pull request body are skipped, not failed, when no title or
   body is available — an absent body is not an empty one.
 - Strict configuration validation: unknown rules and unknown options are errors,
   so a typo never quietly disables a rule.
+
+### Added — release tooling
+
+- A tag-driven release workflow publishing to PyPI through
+  [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no API token
+  is stored in the repository. It refuses to publish when the tag and the packaged
+  version disagree, and runs the full suite before building.
+- The `v<major>` tag moves to each new release, so `uses: rodny90/pr-policy@v0`
+  follows the newest 0.x.
+- The action's shell logic is covered by tests that lift the `run:` block out of
+  `action.yml` and execute it, rather than leaving CI to run it first.
 
 ### Added — repo-ready
 

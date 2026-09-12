@@ -59,24 +59,36 @@ runs:
       run: |
         set -uo pipefail
 
-        base="${BASE:-origin/${BASE_REF}}"
+        if [ -n "$BASE" ]; then
+          base="$BASE"
+        elif [ -n "$BASE_REF" ]; then
+          # A shallow checkout has no remote-tracking ref for the base branch,
+          # and `git fetch origin <branch>` alone does not create one. The
+          # explicit refspec does, which is what `base` below resolves against.
+          git fetch --quiet --depth=50 origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" || true
+          base="origin/${BASE_REF}"
+        else
+          echo "::error::No base ref. Set the 'base' input outside a pull request." >&2
+          exit 2
+        fi
+
         args=(check --base "$base")
-        [ -n "$CONFIG" ] && args+=(--config "$CONFIG")
-        [ "$STRICT" = "true" ] && args+=(--strict)
+        if [ -n "$CONFIG" ]; then args+=(--config "$CONFIG"); fi
+        if [ "$STRICT" = "true" ]; then args+=(--strict); fi
 
-        # The base branch is not fetched by a shallow checkout.
-        git fetch --quiet --depth=50 origin "${BASE_REF}" 2>/dev/null || true
-
-        pr-policy "${args[@]}" --format markdown > policy-comment.md
+        # Human-readable in the job log, and the exit code that decides the job.
+        pr-policy "${args[@]}"
         code=$?
+
+        pr-policy "${args[@]}" --format markdown > policy-comment.md || true
         pr-policy "${args[@]}" --format json > policy-findings.json || true
-        pr-policy "${args[@]}" || true
 
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
         {
-          echo "findings<<EOF"
+          echo "findings<<PR_POLICY_EOF"
           cat policy-findings.json
-          echo "EOF"
+          echo "PR_POLICY_EOF"
         } >> "$GITHUB_OUTPUT"
 
     - name: Comment on the pull request
